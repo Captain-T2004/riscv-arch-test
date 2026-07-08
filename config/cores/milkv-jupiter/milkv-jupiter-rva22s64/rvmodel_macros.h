@@ -74,6 +74,14 @@
 
 // UART0 on K1 may already be initialized by OpenSBI/U-Boot.
 // If running before any firmware, initialize here.
+
+/*
+  Note the known gap: li _R1, K1_UART0_BASE loads 0xD4017000. On RV64, li
+  sign-extends. Since bit 31 of 0xD4017000 is set, this expands to 0xFFFFFFFFD4017000,
+  which is a completely wrong address. This is fine for ELF compilation (no error)
+  but will silently send UART output to the wrong place on hardware. Fixing it
+  requires a lui + addi sequence that zero-extends.
+*/
 #define RVMODEL_IO_INIT(_R1, _R2, _R3)                \
     li   _R1, K1_UART0_BASE                          ;\
     li   _R2, 0x03                                   ;\
