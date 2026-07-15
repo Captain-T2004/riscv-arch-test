@@ -64,6 +64,23 @@
       "xtvec_mode": "Xtvec_Ignore",
       "rv32zdinx_odd_register": "Zdinx_Illegal"
     },
+    "medeleg": {
+      // All exception bits are delegatable on K1 (full S-mode support).
+      // Bits for non-delegatable traps (e.g. ecall from M) are ignored by Sail.
+      "delegatable_bits": {
+        "len": 64,
+        "value": "0xFFFF_FFFF_FFFF_FFFF"
+      }
+    },
+    "mideleg": {
+      // All interrupt bits are delegatable on K1 (full S-mode support).
+      // Bits for non-delegatable interrupts are ignored by Sail.
+      "delegatable_bits": {
+        "len": "xlen",
+        "value": "0xFFFF_FFFF_FFFF_FFFF"
+      }
+    },
+    "privileged_isa_version": "Privileged_ISA_1_13",
     "mstatus": {
       "fs_legal_states": "ExtContext_FourState",
       "vs_legal_states": "ExtContext_FourState"
@@ -262,7 +279,9 @@
       "supported": true
     },
     "F": {
-      "supported": true
+      "supported": true,
+      // K1 updates mstatus.FS precisely on each FP instruction that modifies fflags.
+      "fflags_dirty_policy": "Fflags_Dirty_Precise"
     },
     "D": {
       "supported": true
