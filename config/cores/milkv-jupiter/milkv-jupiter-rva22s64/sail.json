@@ -118,20 +118,16 @@
       "len": 64,
       "value": "0x1000"
     },
-    // K1 physical memory layout (Sail model — simplified for ACT testing):
-    //   Null-guard:  0x00000000 - 0x00000FFF (unmapped; address 0 access fault)
-    //   DRAM-low:    0x00001000 - 0x3FFFFFFF (DTB at 0x1000, low data)
-    //   Gap:         0x40000000 - 0x7FFFFFFF (unmapped → used as access fault target)
-    //   DRAM-high:   0x80000000 - 0xBFFFFFFF (1GB; ELF load region per link.ld)
-    //   Peripherals: 0xC0000000 - 0xDFFFFFFF (K1 SoC peripheral space)
-    // Physical K1 hardware has contiguous DRAM from 0x00000000; the null-guard gap
-    // is intentional for two reasons:
-    //   1. RVMODEL_ACCESS_FAULT_ADDRESS=0x40000000 triggers a fault (main gap).
-    //   2. PMPSm tests that jalr to address 0 must get an instruction access fault
-    //      (MCAUSE=1) before the jalr commits, so the trap handler can use x1 as
-    //      the return label. If 0x0 were mapped, the jalr executes a nop then hits
-    //      0x0000 (illegal instruction, MCAUSE=2), which the trap handler cannot
-    //      classify and aborts.
+    // K1 physical memory layout (Sail model — aligned to Task 2 ACT runner layout):
+    //   Null-guard:      0x00000000 - 0x00000FFF (unmapped; address 0 access fault)
+    //   DRAM-low:        0x00001000 - 0x3FFFFFFF (DTB at 0x1000, low data)
+    //   Gap:             0x40000000 - 0x7FFFFFFF (unmapped → RVMODEL_ACCESS_FAULT_ADDRESS)
+    //   DRAM-mid:        0x80000000 - 0xBFFFFFFF (tohost at 0xC1008000 is in DRAM-k1)
+    //   DRAM-k1:         0xC0000000 - 0xCFFFFFFF (runner firmware + tohost + test ELFs)
+    //   Peripherals:     0xD0000000 - 0xFFFFFFFF (UART, PLIC, CLINT)
+    // The null-guard and gap are intentional:
+    //   1. RVMODEL_ACCESS_FAULT_ADDRESS=0x40000000 must be unmapped for fault tests.
+    //   2. jalr-to-0 tests need instruction access fault (MCAUSE=1), not illegal insn.
     "regions": [
       // DRAM-low: 0x1000-0x3FFFFFFF (DTB at 0x1000; 0x0-0xFFF is null-guard)
       {
@@ -169,7 +165,7 @@
         },
         "include_in_device_tree": true
       },
-      // DRAM-high: 0x80000000-0xBFFFFFFF — where test ELFs are loaded (link.ld: ". = 0x80000000")
+      // DRAM-mid: 0x80000000-0xBFFFFFFF (general DRAM, Sail simulation scratch)
       {
         "base": {
           "len": 64,
@@ -205,7 +201,8 @@
         },
         "include_in_device_tree": true
       },
-      // K1 SoC peripheral MMIO (UART, timer, interrupt controller, etc.)
+      // DRAM-k1: 0xC0000000-0xCFFFFFFF
+      // Runner firmware at 0xC0000000, tohost at 0xC1008000, test ELFs at 0xC8000000.
       {
         "base": {
           "len": 64,
@@ -213,7 +210,44 @@
         },
         "size": {
           "len": 64,
-          "value": "0x20000000" // 0xC0000000 - 0xDFFFFFFF
+          "value": "0x10000000" // 256 MiB: 0xC0000000 - 0xCFFFFFFF
+        },
+        "attributes": {
+          "mem_type": "MainMemory",
+          "cacheable": true,
+          "coherent": true,
+          "executable": true,
+          "readable": true,
+          "writable": true,
+          "read_idempotent": true,
+          "write_idempotent": true,
+          "misaligned_exceptions": {
+            "load_store": {
+              "None": null
+            },
+            "vector": {
+              "Some": "AccessFault"
+            },
+            "amo": "AccessFault"
+          },
+          "atomic_support": "AMOArithmetic",
+          "reservability": "RsrvEventual",
+          "supports_cbo_zero": true,
+          "supports_pte_read": true,
+          "supports_pte_write": true
+        },
+        "include_in_device_tree": true
+      },
+      // K1 SoC peripheral MMIO: 0xD0000000-0xFFFFFFFF
+      // UART0 at 0xD4017000, PLIC at 0xE0000000, CLINT at 0xE4000000.
+      {
+        "base": {
+          "len": 64,
+          "value": "0xD0000000"
+        },
+        "size": {
+          "len": 64,
+          "value": "0x30000000" // 0xD0000000 - 0xFFFFFFFF
         },
         "attributes": {
           "mem_type": "IOMemory",
@@ -255,10 +289,10 @@
       "invalidate_on_same_hart_store": false
     },
     "clint": {
-      // K1 uses an CLINT-compatible machine timer at 0xC4000000.
-      // mtime at 0xC4000008, mtimecmp at 0xC4000020, msip at 0xC4000000.
+      // K1 CLINT (spacemit,k1-clint) at 0xE4000000.
+      // MSIP: 0xE4000000, MTIME: 0xE400BFF8, MTIMECMP: 0xE4004000.
       "supported": true,
-      "base": 3288334336,
+      "base": 3825205248,
       "size": 65536
     },
     "simple_interrupt_generator": {

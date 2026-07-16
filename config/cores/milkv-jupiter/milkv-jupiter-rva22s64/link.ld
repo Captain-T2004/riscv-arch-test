@@ -1,17 +1,19 @@
 /*
  * Linker script for SpacemiT K1 / Milk-V Jupiter bare-metal ACT tests.
  *
- * Load address: 0x80000000 (2GB into K1 DRAM).
+ * Load address: 0xC8000000 (128 MiB into K1 DRAM, which starts at 0xC0000000).
  *
- * This address is chosen for Sail simulation and JTAG-based loading only.
- * It keeps all K1 peripheral addresses (0xC0000000-0xDFFFFFFF) within
- * +-2GB of the PC, which the medany code model requires.
+ * Layout rationale:
+ *   0xC0000000 — ACT runner firmware (BOARD_FW_LOAD_ADDR)
+ *   0xC1008000 — tohost polling address (BOARD_FIXED_TOHOST_ADDR)
+ *   0xC8000000 — test ELF pack + individual ELF load point (here)
  *
- * WARNING: 0x80000000 is also where OpenSBI loads on most RISC-V platforms.
- * If Task 2 uses U-Boot or any resident firmware to load the ELF, this
- * address will conflict. In that case, change to an address above the
- * firmware footprint (e.g. 0xA0000000) and update sail.json memory regions
- * to match. JTAG-based loading (no resident firmware) can use 0x80000000.
+ * From 0xC8000000, all K1 peripherals (UART 0xD4017000, CLINT 0xE4000000,
+ * PLIC 0xE0000000) are within +-2GB, satisfying the medany code model.
+ *
+ * Sail simulation: sail.json DRAM-high region covers 0x80000000-0xBFFFFFFF
+ * which does NOT include 0xC8000000. Update sail.json memory regions if
+ * running Sail simulation against this link address.
  */
 
 OUTPUT_ARCH( "riscv" )
@@ -19,7 +21,7 @@ ENTRY(rvtest_entry_point)
 
 SECTIONS
 {
-  . = 0x80000000;
+  . = 0xC8000000;
   .text.init    : { *(.text.init) }
   .text.rvtest  : { *(.text.rvtest) *(.text.rvtest.*) }
   . = ALIGN(0x4000);

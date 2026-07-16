@@ -2,33 +2,54 @@
 // DUT-specific macro definitions for SpacemiT K1 / Milk-V Jupiter
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// Halt mechanism: UART-based pass/fail signaling, then WFI spin.
-// The firmware runner (Task 2) monitors the UART output for the
-// magic bytes written by RVMODEL_HALT_PASS / RVMODEL_HALT_FAIL.
+// Halt mechanism: tohost-based pass/fail signaling (write 1=PASS, 3=FAIL),
+// then WFI spin. The firmware runner (Task 2) polls BOARD_FIXED_TOHOST_ADDR.
 //
-// Hardware addresses (SpacemiT K1):
+// Hardware addresses (SpacemiT K1, from Bianbu DTS / U-Boot logs):
+//   DRAM base:                  0xC0000000
 //   UART0 (NS16550-compatible): 0xD4017000
-//   Machine timer (mtime):      0xC4000008
-//   Machine timer cmp:          0xC4000020
-//   MSIP:                       0xC4000000
+//   CLINT base:                 0xE4000000  (spacemit,k1-clint)
+//     MSIP  (hart 0):           0xE4000000
+//     MTIME:                    0xE400BFF8
+//     MTIMECMP (hart 0):        0xE4004000
+//   PLIC:                       0xE0000000  (spacemit,k1-plic)
 //
-// Memory layout (see link.ld):
-//   DRAM base: 0x00000000; test ELF loaded at 0x00400000.
-//   Adjust RVMODEL_ELF_LOAD_ADDR if firmware places tests elsewhere.
+// Memory layout for ACT runner (Task 2):
+//   Firmware load+entry: 0xC0000000  (BOARD_FW_LOAD_ADDR)
+//   tohost:              0xC1008000  (BOARD_FIXED_TOHOST_ADDR)
+//   Test ELF pack:       0xC8000000  (BOARD_EXT_PACK_ADDR)
+//   Test ELF load:       0xC8000000  (link.ld ". = 0xC8000000")
 
 #ifndef _RVMODEL_MACROS_H
 #define _RVMODEL_MACROS_H
 
-// K1 UART0 (NS16550 compatible)
-.EQU K1_UART0_BASE,  0xD4017000
-.EQU K1_UART_THR,   (K1_UART0_BASE + 0x00)  // Transmit Holding Register
-.EQU K1_UART_LSR,   (K1_UART0_BASE + 0x14)  // Line Status Register
-.EQU K1_UART_LSR_THRE, 0x20                  // Bit 5: TX Holding Register Empty
+// ── Address loading helper ───────────────────────────────────────────────────
+// All K1 peripheral addresses have bit 31 set (> 0x80000000), so a plain `li`
+// on RV64 sign-extends them to 0xFFFFFFFF_xxxxxxxx — the wrong physical address.
+// LOAD_ADDR32 zero-extends a 32-bit address into a 64-bit register via
+// slli+srli, which clears the upper 32 bits without a scratch register.
+#define LOAD_ADDR32(_REG, _ADDR)               \
+    li   _REG, _ADDR                          ;\
+    slli _REG, _REG, 32                       ;\
+    srli _REG, _REG, 32
 
-// K1 machine timer (CLINT-compatible interface)
-.EQU K1_MTIME_ADDRESS,    0xC4000008
-.EQU K1_MTIMECMP_ADDRESS, 0xC4000020
-.EQU K1_MSIP_ADDRESS,     0xC4000000
+// ── K1 UART0 (NS16550 compatible) ───────────────────────────────────────────
+#define K1_UART0_BASE    0xD4017000
+#define K1_UART_THR_OFF  0x00   /* Transmit Holding Register */
+#define K1_UART_LSR_OFF  0x14   /* Line Status Register      */
+#define K1_UART_LSR_THRE 0x20   /* Bit 5: TX Holding Empty   */
+
+// ── K1 CLINT ────────────────────────────────────────────────────────────────
+#define K1_MSIP_ADDRESS     0xE4000000
+#define K1_MTIME_ADDRESS    0xE400BFF8
+#define K1_MTIMECMP_ADDRESS 0xE4004000
+
+// ── tohost address (must match BOARD_FIXED_TOHOST_ADDR in bpif3_k1.env) ────
+// BOARD_FIXED_TOHOST_ADDR is injected as a compile-time -D flag by the runner
+// build system. Default here matches the proposed K1 env file value.
+#ifndef BOARD_FIXED_TOHOST_ADDR
+#define BOARD_FIXED_TOHOST_ADDR 0xC1008000
+#endif
 
 #define RVMODEL_DATA_SECTION \
     .pushsection .data,"aw",@progbits;  \
@@ -44,46 +65,35 @@
 
 ##### TERMINATION #####
 
-// Halt with a PASS result.
-// Calls rvmodel_io_write_str (always defined by rvtest_setup.h) with a0
-// pointing to "PASS\n\0", then spins in WFI.
-// Using `call` (auipc+jalr) avoids undefined-reference errors that arose
-// from the previous `j _rvmodel_uart_puts` approach where
-// RVMODEL_UART_PUTS_ROUTINE was never invoked to define the label.
+// Write 1 (HTIF PASS) to tohost, then spin in WFI.
+// The runner monitor (runner_monitor.c:620) checks: if (v == 1) → PASS.
+// LOAD_ADDR32 is used because BOARD_FIXED_TOHOST_ADDR (0xC1008000) has bit 31
+// set and would otherwise sign-extend to 0xFFFFFFFF_C1008000.
 #define RVMODEL_HALT_PASS                              \
-    la   a0, 1f                                       ;\
-    call rvmodel_io_write_str                         ;\
+    LOAD_ADDR32(a0, BOARD_FIXED_TOHOST_ADDR)          ;\
+    li   a1, 1                                        ;\
+    sd   a1, 0(a0)                                    ;\
     _rvmodel_halt_pass_loop:                          ;\
     wfi                                               ;\
-    j    _rvmodel_halt_pass_loop                      ;\
-1:  .ascii "PASS\n\0"                                 ;\
-    .balign 4
+    j    _rvmodel_halt_pass_loop
 
-// Halt with a FAIL result.
-// Same approach as RVMODEL_HALT_PASS but writes "FAIL\n".
+// Write 3 (HTIF FAIL, exit code 1) to tohost, then spin in WFI.
 #define RVMODEL_HALT_FAIL                              \
-    la   a0, 1f                                       ;\
-    call rvmodel_io_write_str                         ;\
+    LOAD_ADDR32(a0, BOARD_FIXED_TOHOST_ADDR)          ;\
+    li   a1, 3                                        ;\
+    sd   a1, 0(a0)                                    ;\
     _rvmodel_halt_fail_loop:                          ;\
     wfi                                               ;\
-    j    _rvmodel_halt_fail_loop                      ;\
-1:  .ascii "FAIL\n\0"                                 ;\
-    .balign 4
+    j    _rvmodel_halt_fail_loop
 
 ##### IO #####
 
-// UART0 on K1 may already be initialized by OpenSBI/U-Boot.
-// If running before any firmware, initialize here.
-
-/*
-  Note the known gap: li _R1, K1_UART0_BASE loads 0xD4017000. On RV64, li
-  sign-extends. Since bit 31 of 0xD4017000 is set, this expands to 0xFFFFFFFFD4017000,
-  which is a completely wrong address. This is fine for ELF compilation (no error)
-  but will silently send UART output to the wrong place on hardware. Fixing it
-  requires a lui + addi sequence that zero-extends.
-*/
+// UART0 is initialised by the FSBL/SPL and then again by the ACT runner
+// firmware before any test ELF runs. RVMODEL_IO_INIT writes LCR=0x03 (8N1)
+// as a lightweight re-init guard in case a test ELF is run standalone.
+// LOAD_ADDR32 is required because 0xD4017000 has bit 31 set.
 #define RVMODEL_IO_INIT(_R1, _R2, _R3)                \
-    li   _R1, K1_UART0_BASE                          ;\
+    LOAD_ADDR32(_R1, K1_UART0_BASE)                  ;\
     li   _R2, 0x03                                   ;\
     sb   _R2, 0x0C(_R1)                              ; /* LCR: 8N1 */
 
@@ -92,50 +102,32 @@
     lbu  _R1, 0(_STR_PTR)                            ;\
     beqz _R1, 3f                                     ;\
 2:                                                    ;\
-    li   _R2, K1_UART_LSR                            ;\
+    LOAD_ADDR32(_R2, K1_UART0_BASE)                  ;\
+    addi _R2, _R2, K1_UART_LSR_OFF                  ;\
 4:                                                    ;\
     lbu  _R3, 0(_R2)                                 ;\
     andi _R3, _R3, K1_UART_LSR_THRE                 ;\
     beqz _R3, 4b                                     ;\
-    li   _R2, K1_UART_THR                            ;\
-    sb   _R1, 0(_R2)                                 ;\
+    LOAD_ADDR32(_R2, K1_UART0_BASE)                  ;\
+    sb   _R1, K1_UART_THR_OFF(_R2)                  ;\
     addi _STR_PTR, _STR_PTR, 1                       ;\
     j    1b                                          ;\
 3:
 
 ##### Access Fault #####
 
-// 0x40000000 is unmapped in both the Sail memory model and real K1 hardware:
-//   - Sail model maps DRAM as 0x00000000-0x3FFFFFFF (1GB); 0x40000000 is in the gap.
-//   - K1 SoC: gap between end of DRAM mapping and peripheral space (0xC0000000+).
-// Medany auipc check: 0x40000000 has bit 31 clear (zero-extends to +0x40000000),
-//   pcrel from 0x80000000 = -1GB, well within the ±2GB auipc range.
-// When running on real hardware (Task 2), verify no firmware maps 0x40000000-0x4FFFFFFF.
+// 0x40000000 is in the gap between low address space and K1 DRAM (0xC0000000).
+// Sail model also maps this as unmapped (see sail.json regions).
+// On real K1 hardware verify no firmware aliases this range.
 #define RVMODEL_ACCESS_FAULT_ADDRESS 0x40000000
 
 ##### Machine Timer #####
 
-// K1_MTIME_ADDRESS (0xC4000008) has bit 31 set; `la` in medany computes the
-// PC-relative offset at assembly time from object-file-PC (~0x80000000) to
-// 0xC4000008 (~0.44 GB difference, safe), BUT in selfcheck ELFs that expand
-// many LI() macros the accumulated .option norelax state causes GAS to use
-// auipc+addi instead of lui+addi, blowing past the ±2 GB auipc range for
-// some tests.  Using 0x0200BFF8 -- the value sail_macros.h already assigns
-// for sig.elf builds -- keeps the offset small for all tests.  On real K1
-// hardware the mtime read comes from DRAM rather than the CLINT; the timer
-// does not advance, but this only affects tests that need real timer values
-// (Task 2 concern, not ACT4 ELF generation).
-#define RVMODEL_MTIME_ADDRESS    0x0200BFF8
-// K1_MTIMECMP_ADDRESS (0xC4000020) has bit 31 set.  In selfcheck ELFs (where
-// sail_macros.h is not included), rvtest_trap_handler.h uses this value with
-// both `la` (medany, ±2 GB limit from object-file PC) and the `LI()` macro
-// (requires compile-time constant).  These two constraints are incompatible
-// for a value > 2 GB.  Using 0x02004000 -- the same address sail_macros.h
-// already assigns for sig.elf builds -- satisfies both.  On real K1 hardware
-// the timer-clear write goes to DRAM instead of the CLINT; timer interrupts
-// will not be silenced, but the signature comparison (the ACT4 result) is
-// unaffected.  The correct K1 address is K1_MTIMECMP_ADDRESS = 0xC4000020.
-#define RVMODEL_MTIMECMP_ADDRESS 0x02004000
+// Real K1 MTIME is at 0xE400BFF8 and MTIMECMP at 0xE4004000.
+// From ELF load address 0xC8000000, offset to 0xE400BFF8 = +0x1C00BFF8
+// which is within the medany ±2 GB range, so la/auipc work correctly.
+#define RVMODEL_MTIME_ADDRESS    K1_MTIME_ADDRESS
+#define RVMODEL_MTIMECMP_ADDRESS K1_MTIMECMP_ADDRESS
 
 ##### Machine Interrupts #####
 
@@ -143,23 +135,23 @@
 
 #define RVMODEL_TIMER_INT_SOON_DELAY 200
 
-// K1 uses a custom timer. Interrupt timing ratio vs. cycle count is approximate.
-// Adjust RVMODEL_MAX_CYCLES_PER_TIMER_TICK if tests fail due to timer precision.
 #define RVMODEL_MAX_CYCLES_PER_TIMER_TICK 100
 
 #define RVMODEL_MSIP_ADDRESS K1_MSIP_ADDRESS
 
-// K1 does not have a PLIC at a known public address. Machine/supervisor external
-// interrupt generation macros are left as stubs. Tests requiring MEXT/SEXT will
-// not produce meaningful results until Task 2 documents the K1 interrupt controller.
+// K1 PLIC is at 0xE0000000. External interrupt generation requires writing
+// to PLIC priority/threshold registers. Left as stubs until the exact PLIC
+// register layout is confirmed from K1 hardware testing.
 #define RVMODEL_SET_MEXT_INT(_R1, _R2)
 #define RVMODEL_CLR_MEXT_INT(_R1, _R2)
+
 #define RVMODEL_SET_MSW_INT(_R1, _R2)  \
-    li _R1, 1;                          \
-    li _R2, K1_MSIP_ADDRESS;           \
+    LOAD_ADDR32(_R2, K1_MSIP_ADDRESS) ;\
+    li _R1, 1                         ;\
     sw _R1, 0(_R2);
+
 #define RVMODEL_CLR_MSW_INT(_R1, _R2)  \
-    li _R2, K1_MSIP_ADDRESS;           \
+    LOAD_ADDR32(_R2, K1_MSIP_ADDRESS) ;\
     sw zero, 0(_R2);
 
 ##### Supervisor Interrupts #####
