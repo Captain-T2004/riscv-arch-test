@@ -12,7 +12,7 @@
     // (writable_hpm_counters[2 .. 0]) are ignored.
     "writable_hpm_counters": {
       "len": 32,
-      "value": "0xFFFF_FFFF"
+      "value": "0x00000018"
     },
     // The top 29 bits in this value control whether the
     // corresponding bits of the `scounteren` CSR that control HPM
@@ -23,7 +23,7 @@
     // `writable_hpm_counters`.
     "scounteren_writable_bits": {
       "len": 32,
-      "value": "0xFFFF_FFFF"
+      "value": "0x0000001F"
     },
     // The bits in this value control whether the corresponding bits
     // of the `mcounteren` CSR that control access to HPM counters,
@@ -33,7 +33,7 @@
     // bit is read-only zero.
     "mcounteren_writable_bits": {
       "len": 32,
-      "value": "0x0000007"
+      "value": "0x0000001D"
     },
     // `mtvec.{direct,vectored}.supported` indicates whether the
     // corresponding mode is supported for `mtvec`.  At least one mode
@@ -48,11 +48,12 @@
     "mtvec": {
       "direct": {
         "supported": true,
-        "base_alignment": 4
+        "base_alignment": 2
       },
       "vectored": {
         "supported": true,
-        "base_alignment": 4
+        // U74 requires 2^8 = 256-byte alignment in vectored mode.
+        "base_alignment": 8
       }
     },
      // Similar to `mtvec` above. If `S` mode is not supported, these
@@ -66,7 +67,19 @@
       },
       "vectored": {
         "supported": true,
-        "base_alignment": 4
+        "base_alignment": 8
+      }
+    },
+    "medeleg": {
+      "delegatable_bits": {
+        "len": 64,
+        "value": "0x0000_0000_000c_b3ff"
+      }
+    },
+    "mideleg": {
+      "delegatable_bits": {
+        "len": "xlen",
+        "value": "0x0000_0000_0000_0222"
       }
     },
     // These settings control whether the specified exceptions
@@ -74,7 +87,7 @@
     // `xtval` registers.
     "xtval_nonzero": {
       "illegal_instruction": true,
-      "software_breakpoint": true,
+      "software_breakpoint": false,
       "hardware_breakpoint": true,
       "load_address_misaligned": true,
       "load_access_fault": true,
@@ -118,7 +131,7 @@
       // "Zdinx_Illegal" – treat it as an illegal instruction.
       "rv32zdinx_odd_register": "Zdinx_Fatal"
     },
-  "mstatus": {
+    "mstatus": {
       // The legal values for the FS and VS fields in this CSR are
       // specified by the two fields below.  Their values can be one
       // of:
@@ -126,19 +139,22 @@
       // - "ExtContext_TwoState" allows {Off, Dirty}, and writes of Initial and Clean get written as Dirty.
       // - "ExtContext_Off" allows only {Off}.  This makes the field read-only zero.
       "fs_legal_states": "ExtContext_FourState",
-      "vs_legal_states": "ExtContext_FourState"
-    }
+      "vs_legal_states": "ExtContext_Off"
+    },
+    "privileged_isa_version": "Privileged_ISA_1_11"
   },
   "memory": {
+    "physaddr_bits": 38,
     "pmp": {
       "grain": 10,
+      //minimum region size = 2^(G + 2) //            = 2^(10 + 2)//= 4096 bytes
       // This specifies the number of PMP entries present.
       // The value must be one of 0, 16, or 64.
       "count": 16,
       // This specifies the number of usable PMP entries.
       // Entries higher than this are read-only-zero.
       // The value must be less than or equal to `count`.
-      "usable_count": 16,
+      "usable_count": 8,
       "tor_supported": true,
       "na4_supported": false,
       "napot_supported": true
@@ -158,7 +174,7 @@
         // (use `{"Some": "AlignmentException"}`).
         // This option controls scalar loads/stores.
         "load_store": {
-          "Some": "AlignmentException" 
+          "Some": "AlignmentException"
         },
         // A misaligned vector load/store can be configured
         // independently of the scalar case above, but uses the same
@@ -172,7 +188,9 @@
         "lrsc": "AlignmentException",
         // Similarly, a misaligned AMO currently always faults, and this field
         // can specify either `"AccessFault"` or `"AlignmentException"`.
-        "amo": "AlignmentException"
+        "amo": {
+          "Some": "AccessFault"
+        }
       },
       // If a misaligned access was specified to have no fault in `exceptions` above, the
       // fields below specify how it is handled.
@@ -181,7 +199,7 @@
       // 2^allowed_within_exp sized regions will be split into multiple
       // memory operations. 0 means all misaligned accesses will be split.
       // The maximum value is 12 (one page).
-      "allowed_within_exp": 0,
+      "default_allowed_within_exp": 12,
       // If the access gets split due to `allowed_within_exp` then the size
       // of the operations will be one byte if `byte_by_byte` is set, otherwise
       // they will be the maximum size possible based on the alignment. For
@@ -233,6 +251,8 @@
             "amo": "AccessFault"
           },
           "atomic_support": "AMONone",
+          "misaligned_atomicity_granule_size_exp": 0,
+          "vector_misaligned_atomicity_granule_size_exp": 0,
           "reservability": "RsrvNone",
           "supports_cbo_zero": false,
           "supports_pte_read": false,
@@ -269,6 +289,8 @@
             "amo": "AccessFault"
           },
           "atomic_support": "AMONone",
+          "misaligned_atomicity_granule_size_exp": 0,
+          "vector_misaligned_atomicity_granule_size_exp": 0,
           "reservability": "RsrvNone",
           "supports_cbo_zero": false,
           "supports_pte_read": false,
@@ -297,7 +319,7 @@
           "write_idempotent": true,
           "misaligned_exceptions": {
             "load_store": {
-              "None": null
+              "Some": "AlignmentException"
             },
             "vector": {
               "None": null
@@ -305,6 +327,8 @@
             "amo": "AccessFault"
           },
           "atomic_support": "AMOCASQ",
+          "misaligned_atomicity_granule_size_exp": 0,
+          "vector_misaligned_atomicity_granule_size_exp": 0,
           "reservability": "RsrvEventual",
           "supports_cbo_zero": true,
           "supports_pte_read": true,
@@ -318,7 +342,7 @@
     "vendorid": 0,
     "archid": 0,
     "impid": 0,
-    "hartid": 0,
+    "hartid": 1,
     // Cache block size, specified as a power of 2.
     "cache_block_size_exp": 6,
     "reservation": {
@@ -350,7 +374,7 @@
     "clock_frequency": 1000000000,
     "instructions_per_tick": 2,
     "wfi_is_nop": false,
-    "wfi_available_to_user_mode": true,
+    "wfi_available_to_user_mode": false,
     // The maximum increment in the time CSR before a wait instruction
     // (e.g. WFI, WRS.NTO, WRS.STO) that is not a NOP expires its
     // wait. It is not possible to wait indefinitely.
@@ -372,7 +396,8 @@
       "supported": true
     },
     "F": {
-      "supported": true
+      "supported": true,
+      "fflags_dirty_policy": "Fflags_Dirty_Instruction"
     },
     "D": {
       "supported": true
@@ -482,7 +507,7 @@
       "supported": false
     },
     "Zicntr": {
-      "supported": false
+      "supported": true
     },
     "Zicsr": {
       "supported": true
@@ -516,6 +541,9 @@
     },
     "Zalrsc": {
       "supported": true
+    },
+    "Zama16b": {
+      "supported": false
     },
     "Zawrs": {
       "supported": false,
@@ -660,7 +688,7 @@
       "supported": false
     },
     "Sscofpmf": {
-      "supported": true
+      "supported": false
     },
     "Sscounterenw": {
       "supported": true

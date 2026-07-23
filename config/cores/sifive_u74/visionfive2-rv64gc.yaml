@@ -18,14 +18,16 @@ implemented_extensions:
   - { name: Zicsr, version: "= 2.0" }
   - { name: Zifencei, version: "= 2.0.0" }
   - { name: Zihpm, version: "= 2.0.0" }
+  - { name: Zicntr, version: "= 2.0" }
   - { name: Zaamo, version: "= 1.0.0" }
   - { name: Zalrsc, version: "= 1.0.0" }
   - { name: Zca, version: "= 1.0.0" }
   - { name: Zcd, version: "= 1.0.0" }
   - { name: Zba, version: "= 1.0.0" }
   - { name: Zbb, version: "= 1.0.0" }
-  - { name: Sscofpmf, version: "= 1.0.0" }
   - { name: Sscounterenw, version: "= 1.0.0" }
+  #- { name: Ssstrict, version: "= 1.0.0" } Not Supported by Vision Five 2 board
+  - { name: Sstvecd, version: "= 1.0.0" }
   - { name: Ssu64xl, version: "= 1.0.0" }
   - { name: Sv39, version: "= 1.0.0" }
   - { name: Svbare, version: "= 1.0.0" }
@@ -35,7 +37,7 @@ params:
   MISALIGNED_AMO: false
   LRSC_RESERVATION_STRATEGY: "reserve naturally-aligned 64-byte region"
   LRSC_FAIL_ON_VA_SYNONYM: false
-  LRSC_MISALIGNED_BEHAVIOR: "always raise access fault"
+  LRSC_MISALIGNED_BEHAVIOR: "always raise misaligned exception"
   LRSC_FAIL_ON_NON_EXACT_LRSC: false
   # CONFIG_PTR_ADDRESS: 0
   MUTABLE_MISA_A: false
@@ -44,7 +46,7 @@ params:
   MUTABLE_MISA_M: false
   # F params
   MUTABLE_MISA_F: false
-  HW_MSTATUS_FS_DIRTY_UPDATE: precise
+  HW_MSTATUS_FS_DIRTY_UPDATE: imprecise
   MSTATUS_FS_LEGAL_VALUES: [0, 1, 2, 3]
   # D params
   MUTABLE_MISA_D: false
@@ -59,7 +61,7 @@ params:
   # CACHE_BLOCK_SIZE: 64
   # FORCE_UPGRADE_CBO_INVAL_TO_FLUSH: false
   # Zicntr params
-  # TIME_CSR_IMPLEMENTED: false
+  TIME_CSR_IMPLEMENTED: false
   # U params
   MUTABLE_MISA_U: false
   U_MODE_ENDIANNESS: little
@@ -73,7 +75,7 @@ params:
   REPORT_VA_IN_MTVAL_ON_LOAD_PAGE_FAULT: true
   REPORT_VA_IN_MTVAL_ON_STORE_AMO_PAGE_FAULT: true
   REPORT_VA_IN_MTVAL_ON_INSTRUCTION_PAGE_FAULT: true
-  REPORT_VA_IN_STVAL_ON_BREAKPOINT: true
+  REPORT_VA_IN_STVAL_ON_BREAKPOINT: false
   REPORT_VA_IN_STVAL_ON_LOAD_MISALIGNED: true
   REPORT_VA_IN_STVAL_ON_STORE_AMO_MISALIGNED: true
   REPORT_VA_IN_STVAL_ON_INSTRUCTION_MISALIGNED: true
@@ -125,7 +127,6 @@ params:
   SATP_MODE_BARE: true
   TRAP_ON_ECALL_FROM_S: true
   MSTATUS_VS_LEGAL_VALUES: [0]
-  MSTATUS_TVM_IMPLEMENTED: true
   # Sm params
   MXLEN: 64
   PRECISE_SYNCHRONOUS_EXCEPTIONS: true
@@ -145,7 +146,7 @@ params:
   TRAP_ON_RESERVED_INSTRUCTION: true
   TRAP_ON_UNIMPLEMENTED_CSR: true
   TRAP_ON_ILLEGAL_WLRL: false
-  REPORT_VA_IN_MTVAL_ON_BREAKPOINT: true
+  REPORT_VA_IN_MTVAL_ON_BREAKPOINT: false
   REPORT_VA_IN_MTVAL_ON_LOAD_MISALIGNED: true
   REPORT_VA_IN_MTVAL_ON_STORE_AMO_MISALIGNED: true
   REPORT_VA_IN_MTVAL_ON_INSTRUCTION_MISALIGNED: true
@@ -156,16 +157,21 @@ params:
   MTVAL_WIDTH: 64
  #  CONFIG_PTR_ADDRESS: 0
   PMA_GRANULARITY: 3
-  PHYS_ADDR_WIDTH: 56
+  PHYS_ADDR_WIDTH: 38
   M_MODE_ENDIANNESS: little
   MISA_CSR_IMPLEMENTED: true
   MTVEC_ACCESS: rw
   MTVEC_MODES: [0, 1]
   MTVEC_BASE_ALIGNMENT_DIRECT: 4
-  MTVEC_BASE_ALIGNMENT_VECTORED: 4
+  # SiFive U74 Core Complex Manual: vectored mtvec.BASE requires 256-byte alignment.
+  MTVEC_BASE_ALIGNMENT_VECTORED: 256
   MTVEC_ILLEGAL_WRITE_BEHAVIOR: retain
   NUM_PMP_ENTRIES: 16
+  NUM_USABLE_PMP_ENTRIES: 8
   PMP_GRANULARITY: 12
+  PMP_NA4_SUPPORTED: false
+  PMP_NAPOT_SUPPORTED: true
+  PMP_TOR_SUPPORTED: true
   
   HPM_COUNTER_EN:
     [
@@ -273,4 +279,3 @@ params:
       false,
       false,
     ]
-

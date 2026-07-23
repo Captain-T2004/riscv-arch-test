@@ -10,7 +10,7 @@
 """InterruptsU privileged extension test generator for user-mode interrupts."""
 
 from testgen.asm.helpers import comment_banner
-from testgen.asm.interrupts import clr_mtimer_int, set_mtimer_int, set_mtimer_int_soon
+from testgen.asm.interrupts import clr_mtimer_int, set_mtimer_int, set_mtimer_int_soon, wait_mtimer_int_clear
 from testgen.data.state import TestData
 from testgen.data.test_chunk import TestChunk
 from testgen.priv.registry import add_priv_test_generator
@@ -213,6 +213,12 @@ def _generate_user_wfi_tests(test_data: TestData) -> list[str]:
         lines.extend(
             [
                 "",
+                "RVTEST_GOTO_MMODE",
+                "csrci mstatus, 8 # Disable interrupts while quiescing old sources",
+                "CSRW(mie, zero)",
+                "RVTEST_CLR_MEXT_INT",
+                *clr_mtimer_int(r_temp, r_mtimecmp),
+                *wait_mtimer_int_clear(r_temp, r_scratch),
                 f"LI(x{r_scratch}, 0x200008)",
                 f"CSRC(mstatus, x{r_scratch})",
             ]
@@ -301,6 +307,8 @@ def _generate_user_wfi_timeout_tests(test_data: TestData) -> list[str]:
 
             lines.append("# Clear timer (ensure no interrupt)")
             lines.extend(clr_mtimer_int(r_temp, r_mtimecmp))
+            lines.extend(wait_mtimer_int_clear(r_temp, r_scratch))
+            lines.append("RVTEST_CLR_MEXT_INT")
 
             lines.extend(
                 [
@@ -328,6 +336,7 @@ def make_interruptsu(test_data: TestData) -> list[TestChunk]:
     # Initial setup - clear any pending timer
     tc.code.append("CSRW(mideleg, zero)")
     tc.code.extend(clr_mtimer_int(r_temp, r_mtimecmp))
+    tc.code.extend(wait_mtimer_int_clear(r_temp, r_mtimecmp))
     tc.code.append("")
 
     # Return the temporary registers

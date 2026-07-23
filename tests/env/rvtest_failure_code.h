@@ -52,13 +52,16 @@
         mv DEFAULT_TEMP_REG, x9        # move scratch base into DEFAULT_TEMP_REG
         mv DEFAULT_LINK_REG, x7        # move return address into DEFAULT_LINK_REG
         # now DEFAULT_LINK_REG has the return address of jal from the failure and DEFAULT_TEMP_REG is a vacant temporary register.
-        csrr x1, mcause
+        # This failure entry can be reached from S-mode trap-signature
+        # comparisons. Reading mcause/mtval/mstatus there recursively traps.
+        # Use S-visible aliases so the reporter can finish cleanly.
+        csrr x1, scause
         la x9, saved_mcause
         SREG x1, 0(x9)
-        csrr x1, mtval
+        csrr x1, stval
         la x9, saved_mtval
         SREG x1, 0(x9)
-        csrr x1, mstatus
+        csrr x1, sstatus
         la x9, saved_mstatus
         SREG x1, 0(x9)
         j failedtest_saveregs
