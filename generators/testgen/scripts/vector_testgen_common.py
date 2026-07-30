@@ -1612,8 +1612,6 @@ def getPrivExtraDefines(sew):
     sewsize = sew_to_suffix[minSEW_MIN] if sew == 0 else sew_to_suffix[sew]
     vle = f"vle{minSEW_MIN}.v"
     return "\n".join([
-        "#define rvtest_mtrap_routine",
-        "#define rvtest_strap_routine",
         "#define RVTEST_PRIV_TEST",
         f"#define SEWMIN {minSEW_MIN}",
         f"#define SEWMINSIZE e{minSEW_MIN}",
@@ -1760,7 +1758,6 @@ def insertTemplate(test, signatureWords, name, sew=0, vdsew=0, test_data="", pri
         .replace("@MARCH@", march.lower())
         .replace("@PARAMS@", f"params:\n#   MXLEN: {xlen}")
         .replace("@TEST_DATA@", test_data)
-        .replace("@TEST_FILE_NAME@", f"{test}.S")
         # @SIGUPD_COUNT_FROM_TESTGEN@ intentionally left unreplaced; finalizeSigupdCount()
         # rewrites it after the test body is fully generated and sigupd_count is final.
         .replace("@TESTCASE_STRINGS@", generate_testcase_string_section())
@@ -3091,7 +3088,9 @@ def writeTest(description, instruction, cp, instruction_data=None,
         # _LMUL (= sig_lmul, capped to integer EMUL since whole-register/mask
         # paths use sig_lmul=1 and fractional groups fit in one register).
         sig_emul = max(int(sig_lmul), 1) if sig_lmul is not None and sig_lmul >= 1 else 1
-        reload_zero_lmul = getLmulFlag(sig_emul)
+        # Whole-register store reloads zero each physical destination register individually.
+        # Use LMUL=1 for that setup so v8/v9/... are all legal vmv.v.i destinations.
+        reload_zero_lmul = 1 if instruction in whole_register_stores else getLmulFlag(sig_emul)
         default_lmul_flag = getLmulFlag(lmul)
         reload_pre_init = [
           f"csrr x{mi_t1}, vl",
