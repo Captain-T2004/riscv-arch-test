@@ -33,7 +33,7 @@
     // bit is read-only zero.
     "mcounteren_writable_bits": {
       "len": 32,
-      "value": "0x0000001D"
+      "value": "0x0000001F"
     },
     // `mtvec.{direct,vectored}.supported` indicates whether the
     // corresponding mode is supported for `mtvec`.  At least one mode
@@ -70,10 +70,29 @@
         "base_alignment": 8
       }
     },
+    /*VF2 Unsupported Delegation (Read-Only / Not Delegatable)
+    The following exception causes are not writable in medeleg and therefore remain handled in Machine mode:
+    Cause
+    Exception
+    Instruction Access Fault
+    1
+    5
+    Load Access Fault
+    7
+    Store/AMO Access Fault
+    9
+    Environment Call from S-mode
+    10
+    Reserved
+    11
+    Environment Call from M-mode
+    14
+    Reserved
+*/
     "medeleg": {
       "delegatable_bits": {
         "len": 64,
-        "value": "0x0000_0000_000c_b3ff"
+        "value": "0x0000_0000_0000_b15d"
       }
     },
     "mideleg": {
@@ -144,7 +163,7 @@
     "privileged_isa_version": "Privileged_ISA_1_11"
   },
   "memory": {
-    "physaddr_bits": 38,
+    "physaddr_bits": 36,
     "pmp": {
       "grain": 10,
       //minimum region size = 2^(G + 2) //            = 2^(10 + 2)//= 4096 bytes
@@ -174,7 +193,7 @@
         // (use `{"Some": "AlignmentException"}`).
         // This option controls scalar loads/stores.
         "load_store": {
-          "Some": "AlignmentException"
+          "None": null
         },
         // A misaligned vector load/store can be configured
         // independently of the scalar case above, but uses the same
@@ -189,7 +208,7 @@
         // Similarly, a misaligned AMO currently always faults, and this field
         // can specify either `"AccessFault"` or `"AlignmentException"`.
         "amo": {
-          "Some": "AccessFault"
+          "None": null
         }
       },
       // If a misaligned access was specified to have no fault in `exceptions` above, the
@@ -324,7 +343,7 @@
             "vector": {
               "None": null
             },
-            "amo": "AccessFault"
+            "amo": "AlignmentException"
           },
           "atomic_support": "AMOCASQ",
           "misaligned_atomicity_granule_size_exp": 0,
@@ -338,10 +357,16 @@
       }
     ]
   },
+  /*
+  vf2 config
+mvendorid = 0x00000489
+marchid   = 0x8000000000000007
+mimpid    = 0x04210427
+    */
   "platform": {
-    "vendorid": 0,
-    "archid": 0,
-    "impid": 0,
+     "vendorid": 1161,
+    "archid": 9223372036854775815,
+    "impid": 69272615,
     "hartid": 1,
     // Cache block size, specified as a power of 2.
     "cache_block_size_exp": 6,
