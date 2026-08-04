@@ -886,7 +886,11 @@ init_\__MODE__\()scratch:
 #ifdef RVMODEL_MTIMECMP_ADDRESS            // this looks a bit odd to keep it constant size
 init_\__MODE__\()timecmp:               // init MTIMECMP to largest value if its address is defined
         LI(  T2,  -1)
+  #ifdef RVMODEL_LOAD_MTIMECMP_ADDR          // board hook: address doesn't fit a plain LI (e.g. relocatable symbol needed)
+        RVMODEL_LOAD_MTIMECMP_ADDR(T4)
+  #else
         LI(  T4,  RVMODEL_MTIMECMP_ADDRESS)
+  #endif
         SREG T2,  0(T4)
   .if (UDB_MXLEN==32)
         SREG T2,  4(T4)
@@ -2429,7 +2433,11 @@ excpt_\__MODE__\()hndlr_tbl:
 \__MODE__\()clr_Mtmr_int:                            // M-mode timer interrupt: write max to mtimecmp
         li T5, -1
         #ifdef RVMODEL_MTIMECMP_ADDRESS
+          #ifdef RVMODEL_LOAD_MTIMECMP_ADDR    // board hook: same override as init_Mtimecmp above, mirrored here for the clear path
+                RVMODEL_LOAD_MTIMECMP_ADDR(T2)
+          #else
                 la T2, RVMODEL_MTIMECMP_ADDRESS
+          #endif
                 SREG T5, 0(T2)
         #endif
         #if(UDB_MXLEN == 32)
