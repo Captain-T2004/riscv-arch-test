@@ -11,9 +11,13 @@
  * K1 peripherals (UART 0xD4017000, CLINT 0xE4000000, PLIC 0xE0000000) are
  * more than 2GB from this load address, so they are reached via LOAD_ADDR32
  * (absolute li+shift, see rvmodel_macros.h) rather than PC-relative auipc.
- * Only _k1_mtimecmp below is exposed as a linker symbol, and it is only ever
- * read through the RVMODEL_LOAD_MTIMECMP_ADDR hook, never a bare la/auipc.
  */
+
+STACK_SIZE = 0x20000;
+NUM_HARTS = 1;
+
+PROVIDE(__stack_size = STACK_SIZE);
+PROVIDE(__num_harts = NUM_HARTS);
 
 OUTPUT_ARCH( "riscv" )
 ENTRY(rvtest_entry_point)
@@ -24,7 +28,19 @@ SECTIONS
   .text.init    : { *(.text.init) }
   .text.rvtest  : { *(.text.rvtest) *(.text.rvtest.*) }
   . = ALIGN(0x4000);
-  .data         : { *(.data) }
+  .rodata       : { *(.rodata) *(.rodata.*) *(.srodata) *(.srodata.*) }
+  .data         : { *(.data) *(.data.*) *(.sdata) *(.sdata.*) }
+  . = ALIGN(16);
+  .bss : {
+    __bss_start = .;
+    *(.sbss) *(.sbss.*) *(.bss) *(.bss.*) *(COMMON)
+    . = ALIGN(16);
+    __bss_end = .;
+  }
+  . = ALIGN(16);
+  __stack_bottom = .;
+  . += __stack_size * __num_harts;
+  __stack_top = .;
   . = ALIGN(0x1000);
   .text.rvmodel : { *(.text.rvmodel) *(.text.rvmodel.*) *(.text) *(.text.*) }
   . = ALIGN(0x1000);
