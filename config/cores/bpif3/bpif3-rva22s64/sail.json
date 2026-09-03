@@ -61,9 +61,11 @@
       "rv32zdinx_odd_register": "Zdinx_Illegal"
     },
     "medeleg": {
+      // Measured on real K1 hardware: medeleg does not accept bits 18/19
+      // (software-check, hardware-error) as delegatable.
       "delegatable_bits": {
         "len": 64,
-        "value": "0x0000_0000_000c_b3FF"
+        "value": "0x0000_0000_0000_b3FF"
       }
     },
     "mideleg": {
@@ -307,10 +309,10 @@
       "supported": false
     },
     "Zfh": {
-      "supported": false
+      "supported": true
     },
     "Zfhmin": {
-      "supported": false
+      "supported": true
     },
     "Zfinx": {
       "supported": false
@@ -374,7 +376,7 @@
       "supported": false
     },
     "Zkt": {
-      "supported": false
+      "supported": true
     },
     "Zhinx": {
       "supported": false
@@ -383,13 +385,13 @@
       "supported": false
     },
     "Zvfh": {
-      "supported": false
+      "supported": true
     },
     "Zvfhmin": {
-      "supported": false
+      "supported": true
     },
     "Zvkt": {
-      "supported": false
+      "supported": true
     },
     "Sscofpmf": {
       "supported": true
@@ -413,10 +415,10 @@
       "supported": false
     },
     "Svinval": {
-      "supported": false
+      "supported": true
     },
     "Svnapot": {
-      "supported": false
+      "supported": true
     },
     "Svbare": {
       "supported": true,

@@ -12,13 +12,22 @@ description: >
     3. Behavioral inference — Linux boots on K1; U-mode, S-mode, Sv39, Svbare are required for that.
   Extensions that are NOT in the DTS and cannot be inferred are excluded.
   They require ACT tests on real hardware to verify (Za64rs, Za128rs, Zic64b,
-  Ziccamoa/if/clsm/crse, Ssccptr, Sstvala, Sstvecd, Svade, scalar crypto, H,
-  Zfh, Zfhmin, Zkt, Svinval, Svnapot, Zvfh, Zvfhmin, Zvkt, Sv48).
+  Ziccamoa/if/clsm/crse, Ssccptr, Sstvala, Sstvecd, Svade, scalar crypto, H, Sv48).
   Sv48 was previously listed as "community confirmed" but the official X60
   datasheet and a real boot log's mmu-type both show Sv39 only - removed.
-  Zicntr/Zihpm are not in the DTS but are included anyway: OpenSBI's boot-time
-  hart-feature detection (direct CSR probing, not DT-derived) confirms both on
-  real k1-x_deb1 hardware.
+  IMPORTANT: the DTS source above must be version-matched to the kernel actually
+  running on the board, not just any BPI-SINOVOIP/pi-linux branch. This config
+  was originally built against branch linux-6.1.15-k1 (2024-08-12 snapshot),
+  which was never verified against real hardware and turned out to be stale --
+  our own board's boot log (report/m_min_part5_old_run/clean.log) shows
+  "Linux version 6.6.63 ... Fri Aug 15 12:32:44 UTC 2025". The matching
+  linux-6.6.63-k1 branch's k1-x.dtsi uses the newer, more granular
+  riscv,isa-extensions DT property (the old branch only had the coarse combined
+  riscv,isa string) and directly lists Zfh, Zfhmin, Zkt, Svinval, Svnapot, Zvfh,
+  Zvfhmin, Zvkt, Zicntr, and Zihpm -- all of which are now enabled below on that
+  basis. Zicntr/Zihpm were previously justified only via OpenSBI's boot-time CSR
+  probe (not DTS-derived); they are now directly DTS-confirmed too, on the
+  correct kernel version.
 
 implemented_extensions:
   - { name: I,  version: "= 2.1" }
@@ -39,6 +48,9 @@ implemented_extensions:
   - { name: Zaamo,  version: "= 1.0.0" }
   - { name: Zalrsc, version: "= 1.0.0" }
 
+  # --- Multiply-only subset (spec-implied from M) ---
+  - { name: Zmmul, version: "= 1.0.0" }
+
   # --- Bit manipulation (DTS confirmed) ---
   - { name: Zba, version: "= 1.0.0" }
   - { name: Zbb, version: "= 1.0.0" }
@@ -49,13 +61,26 @@ implemented_extensions:
   - { name: Zca, version: "= 1.0.0" }
   - { name: Zcd, version: "= 1.0.0" }
 
+  # --- Scalar half-precision float (DTS confirmed, linux-6.6.63-k1) ---
+  - { name: Zfh,    version: "= 1.0.0" }
+  - { name: Zfhmin, version: "= 1.0.0" }
+
+  # --- Vector half-precision float (DTS confirmed, linux-6.6.63-k1) ---
+  - { name: Zvfh,    version: "= 1.0.0" }
+  - { name: Zvfhmin, version: "= 1.0.0" }
+
+  # --- Data-independent timing (DTS confirmed, linux-6.6.63-k1) ---
+  - { name: Zkt,  version: "= 1.0.0" }
+  - { name: Zvkt, version: "= 1.0.0" }
+
   # --- Cache (DTS confirmed) ---
   - { name: Zicbom, version: "= 1.0.0" }
   - { name: Zicboz, version: "= 1.0.0" }
   - { name: Zicbop, version: "= 1.0.0" }
 
-  # --- CSR / counter extensions (Zicsr/Zifencei/Zihintpause DTS confirmed;
-  #     Zicntr/Zihpm confirmed via OpenSBI hardware CSR probe, not DTS) ---
+  # --- CSR / counter extensions (all DTS confirmed on linux-6.6.63-k1;
+  #     Zicntr/Zihpm were previously only confirmed via OpenSBI hardware CSR
+  #     probe on the older, unverified linux-6.1.15-k1 DTS) ---
   - { name: Zicntr,     version: "= 2.0" }
   - { name: Zicsr,      version: "= 2.0" }
   - { name: Zifencei,   version: "= 2.0.0" }
@@ -74,6 +99,8 @@ implemented_extensions:
   - { name: Sv39,    version: "= 1.0.0" }   # behavioral inference (Linux boot)
   - { name: Svbare,  version: "= 1.0.0" }   # behavioral inference (Linux boot)
   - { name: Svpbmt,  version: "= 1.0.0" }   # DTS confirmed
+  - { name: Svinval, version: "= 1.0.0" }   # DTS confirmed, linux-6.6.63-k1
+  - { name: Svnapot, version: "= 1.0.0" }   # DTS confirmed, linux-6.6.63-k1
 
   # --- Vector subsets (spec-implied from V + F + D, VLEN=256) ---
   - { name: Zve32x,  version: "= 1.0.0" }
@@ -174,8 +201,8 @@ params:
       false, # 30
       false, # 31
     ]
-  STVEC_MODE_DIRECT: true
-  STVEC_MODE_VECTORED: true
+  STVEC_MODES: [0, 1]
+  STVEC_BASE_ALIGNMENT_VECTORED: 4
   SATP_MODE_BARE: true
   TRAP_ON_ECALL_FROM_S: true
   MSTATUS_VS_LEGAL_VALUES: [0, 1, 2, 3]
@@ -260,38 +287,38 @@ params:
   MCOUNTINHIBIT_IMPLEMENTED: true
   COUNTINHIBIT_EN:
     [
-      true,
-      false,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
+      true,  # 0: cycle
+      false, # 1: time
+      true,  # 2: instret
+      true,  # 3
+      true,  # 4
+      true,  # 5
+      true,  # 6
+      true,  # 7
+      true,  # 8
+      true,  # 9
+      true,  # 10
+      true,  # 11
+      true,  # 12
+      true,  # 13
+      true,  # 14
+      true,  # 15
+      true,  # 16
+      true,  # 17
+      true,  # 18
+      false, # 19: hpmcounter19 not implemented on real K1 silicon
+      false, # 20
+      false, # 21
+      false, # 22
+      false, # 23
+      false, # 24
+      false, # 25
+      false, # 26
+      false, # 27
+      false, # 28
+      false, # 29
+      false, # 30
+      false, # 31
     ]
   MCOUNTENABLE_EN:
     [
